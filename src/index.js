@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises';
+ï»¿import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import nodemailer from 'nodemailer';
@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 const SEEN_PATH = path.join(ROOT_DIR, 'data', 'seen.json');
 
-const KEYWORD = process.env.PCC_KEYWORD ?? 'µL¤H¾÷';
+const KEYWORD = process.env.PCC_KEYWORD ?? '\u7121\u4eba\u6a5f';
 const LOOKBACK_DAYS = Number.parseInt(process.env.PCC_LOOKBACK_DAYS ?? '7', 10);
 const TZ = process.env.TZ ?? 'Asia/Taipei';
 const SEARCH_URL = buildSearchUrl({ keyword: KEYWORD, lookbackDays: LOOKBACK_DAYS, timeZone: TZ });
@@ -161,7 +161,7 @@ async function sendEmail(tenders) {
     }
   });
 
-  const subject = `[PCC] µo²{ ${tenders.length} µ§·sªº¡u${KEYWORD}¡v¼Ð®×`;
+  const subject = `[PCC] ç™¼ç¾ ${tenders.length} ç­†æ–°çš„ã€Œ${KEYWORD}ã€æ¨™æ¡ˆ`;
   const text = tenders
     .map((item, index) => `${index + 1}. ${item.title}\n${item.url}\n${item.summary}`)
     .join('\n\n');
@@ -178,3 +178,5 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+
+
