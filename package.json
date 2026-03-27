@@ -1,0 +1,13 @@
+{
+  "name": "gov-drone-tender-watcher",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.10.0",
+    "playwright": "^1.53.0"
+  }
+}
