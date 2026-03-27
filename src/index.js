@@ -85,25 +85,50 @@ async function fetchTenders(searchUrl, keyword) {
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
     await page.waitForLoadState('networkidle', { timeout: 120000 }).catch(() => {});
 
-    const matches = await page.evaluate((currentKeyword) => {
-      const anchors = Array.from(document.querySelectorAll('a[href*="redirectPublic"]'));
-      const rows = anchors
-        .map((anchor) => {
-          const title = anchor.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-          const href = anchor.getAttribute('href') ?? '';
-          const absoluteUrl = new URL(href, window.location.origin).toString();
-          const rowText = anchor.closest('tr')?.innerText?.replace(/\s+/g, ' ').trim() ?? '';
+    const { rowCount, matches } = await page.evaluate((currentKeyword) => {
+      const normalize = (value) => value?.replace(/\s+/g, ' ').trim() ?? '';
+      const rows = Array.from(document.querySelectorAll('tr'));
+        const parsed = rows
+        .map((row) => {
+          const rowText = normalize(row.innerText);
+          if (!rowText || !rowText.includes(currentKeyword)) {
+            return null;
+          }
+
+          const links = Array.from(row.querySelectorAll('a'));
+          const titleLink =
+            links.find((link) => normalize(link.textContent).includes(currentKeyword)) ??
+            links.find((link) => /\d/.test(normalize(link.textContent))) ??
+            links[0];
+
+          const title = titleLink ? normalize(titleLink.textContent) : rowText;
+          const href = titleLink?.getAttribute('href') ?? '';
+          const onclick = titleLink?.getAttribute('onclick') ?? '';
+          const rawUrl = href || extractUrlFromOnclick(onclick) || '';
+          const url = rawUrl ? new URL(rawUrl, window.location.origin).toString() : window.location.href;
+          const id = `${title}__${url}`;
+
           return {
-            id: absoluteUrl,
+            id,
             title,
-            url: absoluteUrl,
+            url,
             summary: rowText
           };
         })
-        .filter((item) => item.title.includes(currentKeyword));
+        .filter(Boolean);
 
-      return Array.from(new Map(rows.map((item) => [item.id, item])).values());
+      return {
+        rowCount: rows.length,
+        matches: Array.from(new Map(parsed.map((item) => [item.id, item])).values())
+      };
+
+      function extractUrlFromOnclick(onclickValue) {
+        const match = onclickValue.match(/['"]([^'"]+)['"]/);
+        return match ? match[1] : '';
+      }
     }, keyword);
+
+    console.log(`Total result rows scanned: ${rowCount}`);
 
     return matches;
   } finally {
