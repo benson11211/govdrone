@@ -84,53 +84,79 @@ async function fetchTenders(searchUrl, keyword) {
     const page = await browser.newPage();
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
     await page.waitForLoadState('networkidle', { timeout: 120000 }).catch(() => {});
+    await page.waitForTimeout(3000);
 
-    const { rowCount, matches } = await page.evaluate((currentKeyword) => {
-      const normalize = (value) => value?.replace(/\s+/g, ' ').trim() ?? '';
-      const rows = Array.from(document.querySelectorAll('tr'));
-        const parsed = rows
-        .map((row) => {
-          const rowText = normalize(row.innerText);
-          if (!rowText || !rowText.includes(currentKeyword)) {
-            return null;
-          }
+    const frames = page.frames();
+    const frameResults = [];
 
-          const links = Array.from(row.querySelectorAll('a'));
-          const titleLink =
-            links.find((link) => normalize(link.textContent).includes(currentKeyword)) ??
-            links.find((link) => /\d/.test(normalize(link.textContent))) ??
-            links[0];
+    for (const frame of frames) {
+      const result = await frame
+        .evaluate((currentKeyword) => {
+          const normalize = (value) => value?.replace(/\s+/g, ' ').trim() ?? '';
+          const rows = Array.from(document.querySelectorAll('tr'));
+          const parsed = rows
+            .map((row) => {
+              const rowText = normalize(row.innerText);
+              if (!rowText || !rowText.includes(currentKeyword)) {
+                return null;
+              }
 
-          const title = titleLink ? normalize(titleLink.textContent) : rowText;
-          const href = titleLink?.getAttribute('href') ?? '';
-          const onclick = titleLink?.getAttribute('onclick') ?? '';
-          const rawUrl = href || extractUrlFromOnclick(onclick) || '';
-          const url = rawUrl ? new URL(rawUrl, window.location.origin).toString() : window.location.href;
-          const id = `${title}__${url}`;
+              const links = Array.from(row.querySelectorAll('a'));
+              const titleLink =
+                links.find((link) => normalize(link.textContent).includes(currentKeyword)) ??
+                links.find((link) => /\d/.test(normalize(link.textContent))) ??
+                links[0];
+
+              const title = titleLink ? normalize(titleLink.textContent) : rowText;
+              const href = titleLink?.getAttribute('href') ?? '';
+              const onclick = titleLink?.getAttribute('onclick') ?? '';
+              const rawUrl = href || extractUrlFromOnclick(onclick) || '';
+              const url = rawUrl ? new URL(rawUrl, window.location.origin).toString() : window.location.href;
+              const id = `${title}__${url}`;
+
+              return {
+                id,
+                title,
+                url,
+                summary: rowText
+              };
+            })
+            .filter(Boolean);
 
           return {
-            id,
-            title,
-            url,
-            summary: rowText
+            frameUrl: window.location.href,
+            frameTitle: document.title,
+            rowCount: rows.length,
+            matches: Array.from(new Map(parsed.map((item) => [item.id, item])).values())
           };
-        })
-        .filter(Boolean);
 
-      return {
-        rowCount: rows.length,
-        matches: Array.from(new Map(parsed.map((item) => [item.id, item])).values())
-      };
+          function extractUrlFromOnclick(onclickValue) {
+            const match = onclickValue.match(/['"]([^'"]+)['"]/);
+            return match ? match[1] : '';
+          }
+        }, keyword)
+        .catch(() => ({
+          frameUrl: frame.url(),
+          frameTitle: '',
+          rowCount: 0,
+          matches: []
+        }));
 
-      function extractUrlFromOnclick(onclickValue) {
-        const match = onclickValue.match(/['"]([^'"]+)['"]/);
-        return match ? match[1] : '';
-      }
-    }, keyword);
+      frameResults.push(result);
+    }
 
-    console.log(`Total result rows scanned: ${rowCount}`);
+    for (const result of frameResults) {
+      console.log(`Frame scan: ${result.frameUrl} | title=${result.frameTitle} | rows=${result.rowCount} | matches=${result.matches.length}`);
+    }
 
-    return matches;
+    const bestResult = frameResults.sort((a, b) => b.rowCount - a.rowCount)[0] ?? {
+      rowCount: 0,
+      matches: []
+    };
+
+    console.log(`Total result rows scanned: ${bestResult.rowCount}`);
+
+    return bestResult.matches;
   } finally {
     await browser.close();
   }
